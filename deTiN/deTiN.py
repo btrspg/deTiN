@@ -1,13 +1,15 @@
 import argparse
+import copy
 import os
 import sys
+from itertools import compress
+
 import numpy as np
 import pandas as pd
-from itertools import compress
-import copy
-import deTiN_utilities as du
-import deTiN_SSNV_based_estimate as dssnv
-import deTiN_aSCNA_based_estimate as dascna
+
+import deTiN.deTiN_SSNV_based_estimate as dssnv
+import deTiN.deTiN_aSCNA_based_estimate as dascna
+import deTiN.deTiN_utilities as du
 
 
 class input:
@@ -105,7 +107,7 @@ class input:
             self.call_stats_table = pd.read_csv(self.call_stats_file, '\t', index_col=False,
                                                 comment='#', usecols=fields, dtype=fields_type)
         except (ValueError, LookupError):
-            print 'Error reading call stats skipping first two rows and trying again'
+            print('Error reading call stats skipping first two rows and trying again')
             self.call_stats_table = pd.read_csv(self.call_stats_file, '\t', index_col=False,
                                                 comment='#', skiprows=2, usecols=fields, dtype=fields_type)
         if type(self.call_stats_table['contig'][0]) == str:
@@ -145,21 +147,25 @@ class input:
 
     def read_seg_file(self):
         if self.seg_file == 'NULL':
-            self.seg_table = pd.DataFrame(index=[0],columns=['Chromosome','Start.bp','End.bp','n_probes','length','f','tau','genomic_coord_start','genomic_coord_end'])
-            self.het_table = pd.DataFrame(index=[0],columns=['seg_id','tau','f','d','AF_T','AF_N','Chromosome','genomic_coord_x','ALT_COUNT_N'
-                                                             'ALT_COUNT_T','REF_COUNT_N','REF_COUNT_T'])
+            self.seg_table = pd.DataFrame(index=[0],
+                                          columns=['Chromosome', 'Start.bp', 'End.bp', 'n_probes', 'length', 'f', 'tau',
+                                                   'genomic_coord_start', 'genomic_coord_end'])
+            self.het_table = pd.DataFrame(index=[0], columns=['seg_id', 'tau', 'f', 'd', 'AF_T', 'AF_N', 'Chromosome',
+                                                              'genomic_coord_x', 'ALT_COUNT_N'
+                                                                                 'ALT_COUNT_T', 'REF_COUNT_N',
+                                                              'REF_COUNT_T'])
         else:
             seg_header = du.read_file_header(self.seg_file)
             cols_seg_type = {seg_header[0]: str}
             self.seg_table = pd.read_csv(self.seg_file, '\t', index_col=False, low_memory=False, comment='#',
-                                     dtype=cols_seg_type)
+                                         dtype=cols_seg_type)
             self.seg_table = du.fix_seg_file_header(self.seg_table)
             self.seg_table['Chromosome'] = du.chr2num(np.array(self.seg_table['Chromosome']))
 
             self.seg_table['genomic_coord_start'] = du.hg19_to_linear_positions(np.array(self.seg_table['Chromosome']),
-                                                                            np.array(self.seg_table['Start.bp']))
+                                                                                np.array(self.seg_table['Start.bp']))
             self.seg_table['genomic_coord_end'] = du.hg19_to_linear_positions(np.array(self.seg_table['Chromosome']),
-                                                                          np.array(self.seg_table['End.bp']))
+                                                                              np.array(self.seg_table['End.bp']))
 
     def annotate_call_stats_with_allelic_cn_data(self):
         f_acs = np.zeros([self.n_calls_in, 1]) + 0.5
@@ -191,6 +197,7 @@ class input:
         d[np.array(self.het_table['AF_T'] <= 0.5, dtype=bool)] = -1
         self.skew = 0.5
         self.het_table['d'] = d
+
     def read_and_preprocess_SSNVs(self):
         self.read_call_stats_file()
         self.read_seg_file()
@@ -199,10 +206,11 @@ class input:
             if not self.indel_type == 'None':
                 self.indel_table = du.read_indel_vcf(self.indel_file, self.seg_table, self.indel_type)
             else:
-                print 'Warning: if indels are provided you must also specify indel data source using --indel_data_type'
-                print 'no indels will be returned'
+                print('Warning: if indels are provided you must also specify indel data source using --indel_data_type')
+                print('no indels will be returned')
                 self.indel_file = 'None'
                 self.indel_type = 'None'
+
     def read_and_preprocess_aSCNAs(self):
         self.read_seg_file()
         self.read_het_file()
@@ -214,8 +222,6 @@ class input:
     def read_and_preprocess_data(self):
         self.read_and_preprocess_SSNVs()
         self.read_and_preprocess_aSCNAs()
-
-
 
 
 class output:
@@ -278,12 +284,12 @@ class output:
             zero_tin_ssnv_model.maximize_TiN_likelihood()
             zero_total_l = zero_tin_ssnv_model.TiN_likelihood + self.ascna_based_model.TiN_likelihood
             zero_total_l = np.exp(zero_total_l - np.nanmax(zero_total_l))
-            self.p_null = np.true_divide(zero_total_l,np.nansum(zero_total_l))[0]
-            print 'joint TiN estimate = ' + str(self.TiN)
+            self.p_null = np.true_divide(zero_total_l, np.nansum(zero_total_l))[0]
+            print('joint TiN estimate = ' + str(self.TiN))
         # use only ssnv based model
         elif ~np.isnan(self.ascna_based_model.TiN):
             # otherwise TiN estimate is = to aSCNA estimate
-            print 'SSNV based TiN estimate exceed 0.3 using only aSCNA based estimate'
+            print('SSNV based TiN estimate exceed 0.3 using only aSCNA based estimate')
             self.joint_log_likelihood = self.ascna_based_model.TiN_likelihood
             self.joint_posterior = np.exp(
                 self.ascna_based_model.TiN_likelihood - np.nanmax(self.ascna_based_model.TiN_likelihood))
@@ -300,7 +306,7 @@ class output:
             self.p_null = self.joint_posterior[0]
         # use only aSCNA based estimate
         elif ~np.isnan(self.ssnv_based_model.TiN) and self.ssnv_based_model.TiN <= 0.3:
-            print 'No aSCNAs only using SSNV based model'
+            print('No aSCNAs only using SSNV based model')
             self.joint_log_likelihood = self.ssnv_based_model.TiN_likelihood
             self.joint_posterior = np.exp(
                 self.ssnv_based_model.TiN_likelihood - np.nanmax(self.ssnv_based_model.TiN_likelihood))
@@ -323,7 +329,7 @@ class output:
             self.p_null = np.true_divide(zero_total_l, np.nansum(zero_total_l))[0]
 
         else:
-            print 'insuffcient data to generate TiN estimate.'
+            print('insuffcient data to generate TiN estimate.')
             self.CI_tin_high = 0
             self.CI_tin_low = 0
             self.joint_posterior = np.zeros([self.input.resolution, 1])
@@ -335,7 +341,7 @@ class output:
         pH0 = self.p_null
         if np.true_divide(self.input.TiN_prior * pH1,
                           (self.input.TiN_prior * pH1) + ((1 - self.input.TiN_prior) * pH0)) < 0.5:
-            print 'insufficient evidence to justify TiN > 0'
+            print('insufficient evidence to justify TiN > 0')
             self.joint_posterior = np.zeros([self.input.resolution, 1])
             self.joint_posterior[0] = 1
             self.TiN_int = 0
@@ -369,14 +375,14 @@ class output:
         # probability of normal allele fraction less than or equal to predicted fraction
         self.SSNVs.loc[:, 'p_outlier'] = self.ssnv_based_model.rv_normal_af.cdf(af_n_given_TiN + 0.01)
         if self.TiN_int == 0:
-            print 'Estimated 0 TiN no SSNVs will be recovered outputing deTiN statistics for each site'
+            print('Estimated 0 TiN no SSNVs will be recovered outputing deTiN statistics for each site')
         elif self.use_outlier_threshold:
             # remove outliers mutations p(af_n >= E[af_n|TiN]) < 0.05
             self.SSNVs['judgement'][np.logical_and(self.SSNVs['p_somatic_given_TiN'] > self.threshold,
                                                    self.SSNVs['p_outlier'] >= 0.01)] = 'KEEP'
         else:
             self.SSNVs['judgement'][self.SSNVs['p_somatic_given_TiN'] > self.threshold] = 'KEEP'
-        if  self.input.indel_file != 'None':
+        if self.input.indel_file != 'None':
             if self.input.indel_table.isnull().values.sum() == 0:
                 indel_model = dssnv.model(self.input.indel_table, self.input.mutation_prior, self.input.resolution)
                 indel_model.generate_conditional_ps()
@@ -389,15 +395,16 @@ class output:
                 self.indels.loc[:, ('p_somatic_given_TiN')] = np.nan_to_num(np.true_divide(numerator, denominator))
                 self.indels.loc[:, 'p_outlier'] = indel_model.rv_normal_af.cdf(af_n_given_TiN)
                 if self.TiN_int == 0:
-                    print 'Estimated 0 TiN no indels will be recovered outputing deTiN statistics for each site'
+                    print('Estimated 0 TiN no indels will be recovered outputing deTiN statistics for each site')
                 elif self.use_outlier_threshold:
                     # remove outliers mutations p(af_n >= E[af_n|TiN]) < 0.05
                     self.indels['filter'][np.logical_and(self.indels['p_somatic_given_TiN'] > self.threshold,
-                                                     self.indels['p_outlier'] >= 0.01)] = 'PASS'
+                                                         self.indels['p_outlier'] >= 0.01)] = 'PASS'
                 else:
                     self.indels['filter'][self.indels['p_somatic_given_TiN'] > self.threshold] = 'PASS'
-            elif self.input.indel_table.isnull().values.sum() >  0:
+            elif self.input.indel_table.isnull().values.sum() > 0:
                 self.indels = self.input.indel_table
+
 
 __version__ = '1.0'
 
@@ -412,7 +419,7 @@ def main():
     # input files
     parser.add_argument('--mutation_data_path',
                         help='Path to mutation candidate SSNV data.'
-                             'Supported formats: MuTect call-stats', required=False, default = 'NULL')
+                             'Supported formats: MuTect call-stats', required=False, default='NULL')
     parser.add_argument('--cn_data_path',
                         help='Path to copy number data.'
                              'Supported format: AllelicCapseg .seg file. Generated by GATK4 AllelicCNV.',
@@ -424,7 +431,7 @@ def main():
     parser.add_argument('--normal_het_data_path',
                         help='Path to heterozygous site allele count data in normal. Generated by GATK4 GetBayesianHetCoverage'
                              'Required columns: CONTIG,POS,REF_COUNT and ALT_COUNT', required=False,
-                        default = 'NULL')
+                        default='NULL')
     parser.add_argument('--exac_data_path',
                         help='Path to exac af > 0.01 pickle. Can be generated by downloading ExAC VCF and running build_exac_pickle',
                         required=False)
@@ -474,26 +481,29 @@ def main():
                              'The format of this file is Chromosome\tPosition\tProbability. Note this will override the mutation prior at these locations'
                         , required=False, default='NA')
     parser.add_argument('--only_ascnas',
-                        help='only use ascna data for TiN estimation',required=False, action='store_true')
+                        help='only use ascna data for TiN estimation', required=False, action='store_true')
     args = parser.parse_args()
     if args.cn_data_path == 'NULL' and args.mutation_data_path == 'NULL':
-        print 'One of CN data or SSNV data are required.'
+        print('One of CN data or SSNV data are required.')
         sys.exit()
-    elif args.cn_data_path =='NULL':
+    elif args.cn_data_path == 'NULL':
         di = input(args)
         di.read_and_preprocess_SSNVs()
         di.candidates = du.select_candidate_mutations(di.call_stats_table, di.exac_db_file)
         ssnv_based_model = dssnv.model(di.candidates, di.mutation_prior, di.resolution, di.SSNV_af_threshold,
-                                       di.coverage_threshold, di.CancerHotSpotsBED, skew = di.skew)
+                                       di.coverage_threshold, di.CancerHotSpotsBED, skew=di.skew)
         ssnv_based_model.perform_inference()
         ascna_based_model = dascna.model(di.seg_table, di.het_table, di.resolution)
         ascna_based_model.TiN = np.nan
 
-    elif args.mutation_data_path=='NULL':
+    elif args.mutation_data_path == 'NULL':
         di = input(args)
         di.read_and_preprocess_aSCNAs()
-        di.candidates = pd.DataFrame(index=[0],columns=['contig', 'position', 'ref_allele', 'alt_allele', 'tumor_name', 'normal_name',
-                't_alt_count','t_ref_count', 'n_alt_count', 'n_ref_count', 'failure_reasons', 'judgement','genomic_coord_x','f_acs','tau'])
+        di.candidates = pd.DataFrame(index=[0], columns=['contig', 'position', 'ref_allele', 'alt_allele', 'tumor_name',
+                                                         'normal_name',
+                                                         't_alt_count', 't_ref_count', 'n_alt_count', 'n_ref_count',
+                                                         'failure_reasons', 'judgement', 'genomic_coord_x', 'f_acs',
+                                                         'tau'])
         ssnv_based_model = dssnv.model(di.candidates, di.mutation_prior, di.resolution, di.SSNV_af_threshold,
                                        di.coverage_threshold, di.CancerHotSpotsBED)
         ssnv_based_model.TiN = np.nan
@@ -521,18 +531,19 @@ def main():
         n_calls_pre = np.sum(di.candidates['judgement'] == "KEEP")
         # generate SSNV based model using candidate sites
         ssnv_based_model = dssnv.model(di.candidates, di.mutation_prior, di.resolution, di.SSNV_af_threshold,
-                                   di.coverage_threshold, di.CancerHotSpotsBED)
+                                       di.coverage_threshold, di.CancerHotSpotsBED)
         ssnv_based_model.perform_inference()
         if di.only_ascnas == True:
             ssnv_based_model.TiN = np.nan
-            print 'Only using aSCNA data'
+            print('Only using aSCNA data')
         ascna = False
         # identify aSCNAs and filter hets
         if len(di.seg_table) > 0:
             di.aSCNA_hets = du.ensure_balanced_hets(di.seg_table, di.het_table)
             if len(di.aSCNA_hets) > 0:
-                di.aSCNA_segs,di.convergent_segs = du.identify_aSCNAs(di.seg_table, di.aSCNA_hets, di.aSCNA_thresh, di.ascna_SNP_number_filter,
-                                               di.aSCNA_variance_threshold)
+                di.aSCNA_segs, di.convergent_segs = du.identify_aSCNAs(di.seg_table, di.aSCNA_hets, di.aSCNA_thresh,
+                                                                       di.ascna_SNP_number_filter,
+                                                                       di.aSCNA_variance_threshold)
                 if len(di.aSCNA_segs) > 0:
                     ascna_based_model = dascna.model(di.aSCNA_segs, di.aSCNA_hets, di.resolution)
                     ascna_based_model.perform_inference()
@@ -544,10 +555,10 @@ def main():
         # combine models and reclassify mutations
     do = output(di, ssnv_based_model, ascna_based_model)
     do.calculate_joint_estimate()
-    if len(do.SSNVs)>1:
+    if len(do.SSNVs) > 1:
         do.reclassify_mutations()
         do.SSNVs.drop('Chromosome', axis=1, inplace=True)
-    n_calls_post = np.sum(do.SSNVs['judgement']=="KEEP")
+    n_calls_post = np.sum(do.SSNVs['judgement'] == "KEEP")
     n_calls_added = n_calls_post - n_calls_pre
     # make output directory if needed
     if not os.path.exists(args.output_dir):
@@ -557,15 +568,16 @@ def main():
                     index=None)
 
     if not di.indel_file == 'None':
-        #if 'Chromosome' in do.indels.columns:
+        # if 'Chromosome' in do.indels.columns:
         do.indels.drop('Chromosome', axis=1, inplace=True)
         do.indels.to_csv(path_or_buf=do.input.output_path + '/' + do.input.output_name + '.deTiN_indels.txt', sep='\t',
                          index=None)
     # write plots
     if not np.isnan(ascna_based_model.TiN):
         do.ascna_based_model.segs['Chromosome'] = do.ascna_based_model.segs['Chromosome'] + 1
-        do.ascna_based_model.segs.to_csv(path_or_buf=do.input.output_path + '/' + do.input.output_name + '.deTiN_aSCNAs.txt', sep='\t',
-                    index=None)
+        do.ascna_based_model.segs.to_csv(
+            path_or_buf=do.input.output_path + '/' + do.input.output_name + '.deTiN_aSCNAs.txt', sep='\t',
+            index=None)
         du.plot_kmeans_info(ascna_based_model, do.input.output_path, do.input.output_name)
         du.plot_TiN_models(do)
         du.plot_aSCNA_het_data(do)
@@ -580,8 +592,9 @@ def main():
     file.write('%s - %s' % (str(do.CI_tin_low), str(do.CI_tin_high)))
     file.close()
 
-    file = open(do.input.output_path + '/' + do.input.output_name + '.number_of_SSNVs_added.txt','w')
-    file.write('%s\n'% int(n_calls_added))
+    file = open(do.input.output_path + '/' + do.input.output_name + '.number_of_SSNVs_added.txt', 'w')
+    file.write('%s\n' % int(n_calls_added))
+
 
 if __name__ == "__main__":
     main()

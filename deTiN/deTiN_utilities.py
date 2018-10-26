@@ -1,17 +1,23 @@
-import numpy as np
-import sys
-from scipy.stats import beta
-from scipy.stats import fisher_exact
-from itertools import compress
 import gzip
-import random
-import pandas as pd
-import matplotlib
 import pickle
+import random
+import sys
+from itertools import compress
+
+import matplotlib
+import numpy as np
+import pandas as pd
+from scipy.stats import fisher_exact
+
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 random.seed(1)
+
+try:
+    xrange
+except NameError:
+    xrange = range
 
 
 def is_number(s):
@@ -75,33 +81,37 @@ def remove_sites_near_centromere_and_telomeres(het_table):
     return het_table
 
 
-def filter_hets_based_on_coverage(het_table, depth = 10):
+def filter_hets_based_on_coverage(het_table, depth=10):
     het_table = het_table[np.logical_and(het_table['READ_DEPTH_N'] > depth, het_table['READ_DEPTH_T'] > depth)]
     het_table.reset_index(inplace=True, drop=True)
     return het_table
 
 
-def filter_segments_based_on_size_f_and_tau(seg_table, aSCNA_thresh, n_probes = 200):
+def filter_segments_based_on_size_f_and_tau(seg_table, aSCNA_thresh, n_probes=200):
     seg_table = seg_table[np.logical_and.reduce(np.array([np.array(seg_table['f']) < 0.5 - aSCNA_thresh,
                                                           seg_table['n_probes'] > n_probes, seg_table['tau'] > 0]))]
     seg_table.reset_index(inplace=True, drop=True)
     return seg_table
 
-def alternate_file_headers():
 
-    headers = {'alternate_headers_position' : ['Start', 'Start_bp', 'start','position','pos','POS','Start_position'],
-               'alternate_headers_start_position' : ['Start', 'Start_bp', 'start','position','pos','POS','Start_position','START'],
-               'alternate_headers_end_position' : ['End', 'End_bp', 'end','END'],
-               'alternate_headers_chromosome' : ['Contig', 'chrom', 'CONTIG', 'chr', 'Chrom', 'CHROMOSOME','Chromosome','contig'],
-               'alternate_headers_f' : ['f_acs', 'MAF_Post_Mode','MINOR_ALLELE_FRACTION_POSTERIOR_50'],
-               'alternate_headers_tau' : ['CN', 'Segment_Mean_Post_Mode','LOG2_COPY_RATIO_POSTERIOR_50'],
-               'alternate_headers_alt_count' : ['t_alt_count', 'n_alt_count', 'alt_count', 'i_t_alt_count', 'i_n_alt_count'],
-               'alternate_headers_ref_count' : ['t_ref_count', 'n_ref_count', 'ref_count', 'i_t_ref_count', 'i_n_ref_count'],
-               'alternate_headers_n_probes': ['n_probes','NUM_POINTS_COPY_RATIO','Num_Targets']}
+def alternate_file_headers():
+    headers = {'alternate_headers_position': ['Start', 'Start_bp', 'start', 'position', 'pos', 'POS', 'Start_position'],
+               'alternate_headers_start_position': ['Start', 'Start_bp', 'start', 'position', 'pos', 'POS',
+                                                    'Start_position', 'START'],
+               'alternate_headers_end_position': ['End', 'End_bp', 'end', 'END'],
+               'alternate_headers_chromosome': ['Contig', 'chrom', 'CONTIG', 'chr', 'Chrom', 'CHROMOSOME', 'Chromosome',
+                                                'contig'],
+               'alternate_headers_f': ['f_acs', 'MAF_Post_Mode', 'MINOR_ALLELE_FRACTION_POSTERIOR_50'],
+               'alternate_headers_tau': ['CN', 'Segment_Mean_Post_Mode', 'LOG2_COPY_RATIO_POSTERIOR_50'],
+               'alternate_headers_alt_count': ['t_alt_count', 'n_alt_count', 'alt_count', 'i_t_alt_count',
+                                               'i_n_alt_count'],
+               'alternate_headers_ref_count': ['t_ref_count', 'n_ref_count', 'ref_count', 'i_t_ref_count',
+                                               'i_n_ref_count'],
+               'alternate_headers_n_probes': ['n_probes', 'NUM_POINTS_COPY_RATIO', 'Num_Targets']}
     return headers
 
-def read_file_header(text_file):
 
+def read_file_header(text_file):
     headers = alternate_file_headers()
     with open(text_file, 'rt') as f:
         for header_lines, line in enumerate(f):
@@ -109,14 +119,16 @@ def read_file_header(text_file):
             if not line[0] == '#':
                 break
     file_head = line.split('\t')
-    try :
+    try:
         headers['alternate_headers_chromosome'].index(file_head[0])
     except ValueError:
-        sys.exit('The first column of all input files should be chromosome: could not find any of the chromosome headers in the first column of '+
-                 text_file)
+        sys.exit(
+            'The first column of all input files should be chromosome: could not find any of the chromosome headers in the first column of ' +
+            text_file)
     return file_head
 
-def identify_aSCNAs(seg_table, het_table, aSCNA_thresh = 0.1, n_snps = 20, var_thresh = 0.025):
+
+def identify_aSCNAs(seg_table, het_table, aSCNA_thresh=0.1, n_snps=20, var_thresh=0.025):
     # identify aSCNAs based on minor allele fraction of segments
     mu_af_n = np.mean(het_table['AF_N'])
     f_detin = np.zeros([len(seg_table), 1])
@@ -124,7 +136,7 @@ def identify_aSCNAs(seg_table, het_table, aSCNA_thresh = 0.1, n_snps = 20, var_t
     n_snps_above_mu = np.zeros([len(seg_table), 1])
     n_snps_below_mu = np.zeros([len(seg_table), 1])
     fishers_p_convergent_seg = np.ones([len(seg_table), 1])
-    thresh_snps = np.round(np.true_divide(n_snps,2))
+    thresh_snps = np.round(np.true_divide(n_snps, 2))
     for seg_id, seg in seg_table.iterrows():
         seg_hets = het_table[het_table['seg_id'] == seg_id]
         f_detin[seg_id] = mu_af_n - np.mean(np.abs(seg_hets['AF_T'] - mu_af_n))
@@ -151,7 +163,7 @@ def identify_aSCNAs(seg_table, het_table, aSCNA_thresh = 0.1, n_snps = 20, var_t
     if any((seg_table['fishers_p_convergent_seg'] * len(seg_table)) < 0.05):
         segs = (seg_table['fishers_p_convergent_seg'] * len(seg_table)) < 0.05
         ix = list(compress(xrange(len(segs)), segs))
-        print 'identified convergent aSCNA in normal on chromosomes:' + str(np.unique(seg_table['Chromosome'][ix] + 1))
+        print('identified convergent aSCNA in normal on chromosomes:' + str(np.unique(seg_table['Chromosome'][ix] + 1)))
         convergent_segs = seg_table[seg_table['fishers_p_convergent_seg'] * len(seg_table) <= 0.05]
     else:
         convergent_segs = None
@@ -161,7 +173,7 @@ def identify_aSCNAs(seg_table, het_table, aSCNA_thresh = 0.1, n_snps = 20, var_t
                                         seg_table['n_snps_below_mu'] > thresh_snps,
                                         seg_table['f_detin'] <= 0.5 - aSCNA_thresh,
                                         seg_table['f_variance'] < var_thresh]))]
-    return aSCNAs,convergent_segs
+    return aSCNAs, convergent_segs
 
 
 def ensure_balanced_hets(seg_table, het_table):
@@ -210,7 +222,7 @@ def plot_kmeans_info(ascna_based_model, output_path, sample_name):
     plt.xlabel('Number of clusters')
     plt.ylabel('Average within-cluster sum of squares')
     plt.title('KMeans residual')
-    plt.xticks([1,2,3])
+    plt.xticks([1, 2, 3])
     fig.set_dpi(150)
     fig.savefig(output_path + '/' + sample_name + '_KmeansEval_plot.png', bbox_inches='tight')
 
@@ -221,33 +233,37 @@ def plot_kmeans_info(ascna_based_model, output_path, sample_name):
     if len(X) > 1:
         for i in range(K[kIdx]):
             ind = (ascna_based_model.cluster_assignment == i)
-            ax.errorbar(X[ind], Y[ind], xerr=[X[ind]-X_low[ind],X_high[ind]-X[ind]] , c=clr[i], label='Cluster %d' % i,ls='None',marker='.')
+            ax.errorbar(X[ind], Y[ind], xerr=[X[ind] - X_low[ind], X_high[ind] - X[ind]], c=clr[i],
+                        label='Cluster %d' % i, ls='None', marker='.')
     else:
-        ax.errorbar(X,Y+1,xerr=[X-X_low,X_high-X],c='b',label='Cluster 1',ls='None',marker='.')
+        ax.errorbar(X, Y + 1, xerr=[X - X_low, X_high - X], c='b', label='Cluster 1', ls='None', marker='.')
 
     plt.xlabel('MAP tumor in normal estimate (%)')
     plt.ylabel('Chromosome')
     plt.title('Cluster by chromosome and TiN')
-    plt.yticks(np.arange(min(Y) , max(Y) + 2, 2.0))
+    plt.yticks(np.arange(min(Y), max(Y) + 2, 2.0))
     plt.xticks(np.arange(0, max(X) + 1, np.max([np.round(np.true_divide(np.max(X), 10)), 1])))
     ax.set_xlim([-2, np.max(X) + 2])
 
     fig.set_dpi(150)
     fig.savefig(output_path + '/' + sample_name + '_KmeansEval_scatter_plot.png', bbox_inches='tight')
 
+
 def plot_aSCNA_het_data(do):
     fig, ax = plt.subplots(1, 1)
     ax.plot(do.input.het_table['genomic_coord_x'], do.input.het_table['AF_T'], c=[0.5, 0.5, 0.5], marker='.', ls='None',
             ms=1, alpha=0.5)
-    tumor_af = ax.plot(do.ascna_based_model.hets['genomic_coord_x'], do.ascna_based_model.hets['AF_T'], c=[0, 0, 1], marker='.',
-            ls='None', ms=5)
-    normal_af = ax.plot(do.ascna_based_model.hets['genomic_coord_x'], do.ascna_based_model.hets['AF_N'], c=[1, 0, 0], marker='.',
-            ls='None', ms=5)
+    tumor_af = ax.plot(do.ascna_based_model.hets['genomic_coord_x'], do.ascna_based_model.hets['AF_T'], c=[0, 0, 1],
+                       marker='.',
+                       ls='None', ms=5)
+    normal_af = ax.plot(do.ascna_based_model.hets['genomic_coord_x'], do.ascna_based_model.hets['AF_N'], c=[1, 0, 0],
+                        marker='.',
+                        ls='None', ms=5)
     fig.set_dpi(300)
     chrs = hg19_to_linear_positions(np.linspace(0, 23, 24), np.ones([23]))
     for c in chrs:
         ax.plot([c, c], [0, 1], 'k--')
-    plt.legend(handles=[tumor_af[0], normal_af[0]],labels=['Tumor', 'Normal'])
+    plt.legend(handles=[tumor_af[0], normal_af[0]], labels=['Tumor', 'Normal'])
     ax.set_xticks((chrs[1:] + chrs[:-1]) / 2)
     ax.set_xticklabels((np.linspace(1, 24, 24, dtype=int)), size=5, rotation=90)
     ax.set_yticks(np.linspace(0, 1, 5))
@@ -258,6 +274,7 @@ def plot_aSCNA_het_data(do):
     fig.savefig(do.input.output_path + '/' + do.input.output_name + '_TiN_hets_aSCNA_model.png', bbox_inches='tight')
     fig.savefig(do.input.output_path + '/' + do.input.output_name + '_TiN_hets_aSCNA_model.eps', bbox_inches='tight')
 
+
 def plot_TiN_models(do):
     fig, ax = plt.subplots(1, 1)
     TiN_range = np.linspace(0, 1, num=do.input.resolution)
@@ -265,8 +282,8 @@ def plot_TiN_models(do):
         ascna = ax.plot(TiN_range,
                         np.true_divide(np.exp(
                             do.ascna_based_model.TiN_likelihood - np.nanmax(do.ascna_based_model.TiN_likelihood)),
-                                       np.nansum(np.exp(do.ascna_based_model.TiN_likelihood - np.nanmax(
-                                           do.ascna_based_model.TiN_likelihood))))
+                            np.nansum(np.exp(do.ascna_based_model.TiN_likelihood - np.nanmax(
+                                do.ascna_based_model.TiN_likelihood))))
                         , 'r--', lw=1)
     ssnv = ax.plot(TiN_range,
                    np.true_divide(
@@ -290,7 +307,8 @@ def plot_TiN_models(do):
 
 def plot_SSNVs(do):
     fig, ax = plt.subplots(1, 1)
-    TiN_fit = ax.plot(np.linspace(0, 1, do.input.resolution), np.multiply(do.TiN, np.linspace(0, 1, do.input.resolution)), '--', lw=1, alpha=1,
+    TiN_fit = ax.plot(np.linspace(0, 1, do.input.resolution),
+                      np.multiply(do.TiN, np.linspace(0, 1, do.input.resolution)), '--', lw=1, alpha=1,
                       color='#1D1D1D')
     background = ax.plot(do.ssnv_based_model.tumor_f, do.ssnv_based_model.normal_f
                          , '.', lw=0.1, alpha=0.75, color=[0.75, 0.75, 0.75])
@@ -301,7 +319,7 @@ def plot_SSNVs(do):
                        'b.', lw=0.1)
     d_kept = np.logical_and(do.SSNVs['judgement'] == 'KEEP', ~do.SSNVs.isnull()['failure_reasons']).values
     yerr_low = do.ssnv_based_model.normal_f[d_kept] - cis[0][d_kept]
-    yerr_low[yerr_low<0] = 0
+    yerr_low[yerr_low < 0] = 0
     detin_kept = ax.errorbar(do.ssnv_based_model.tumor_f[d_kept], do.ssnv_based_model.normal_f[d_kept],
                              yerr=[yerr_low,
                                    cis[1][d_kept] - do.ssnv_based_model.normal_f[d_kept]], fmt='r.', capsize=2)
@@ -348,10 +366,10 @@ def hg19_to_linear_positions(chromosome, position, **keyword_parameters):
                       102531392, 90354753, 81195210, 78077248, 59128983, 63025520, 48129895, 51304566,
                       155270560, 59373566, 16569])  # chromosome lengths from genome-mysql.cse.ucsc.edu
     if build == 'hg38':
-        L = np.array([248956422,242193529,198295559,190214555,181538259,170805979,159345973,
-                      145138636,138394717,133797422,135086622,133275309,114364328,107043718,
-                      101991189,90338345,83257441,80373285,58617616,64444167,46709983,50818468,
-                      156040895,57227415,16569])
+        L = np.array([248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 159345973,
+                      145138636, 138394717, 133797422, 135086622, 133275309, 114364328, 107043718,
+                      101991189, 90338345, 83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
+                      156040895, 57227415, 16569])
 
     C = np.append(1, np.cumsum(L))
     x = np.array([chromosome[int(i)] for i in np.arange(0, len(position))])
@@ -371,47 +389,59 @@ def fix_het_file_header(het_file):
         missing_idx = np.where(~np.isfinite((is_member(required_headers, het_file.columns))))
         for i in missing_idx[0]:
             if required_headers[i] == 'POSITION':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_position'], het_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_position'], het_file.columns))) > 1:
+                if np.sum(
+                        np.isfinite(is_member(headers['alternate_headers_position'], het_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_position'], het_file.columns))) > 1:
                     sys.exit('missing required header POSITION and could not replace with POS,position, or pos!')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_position'], het_file.columns)))
-                    het_file.rename(columns={headers['alternate_headers_position'][idx_replace[0][0]]: 'POSITION'}, inplace=True)
-                    print 'changing header of het file from ' + headers['alternate_headers_position'][
-                        idx_replace[0][0]] + ' to POSITION'
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_position'], het_file.columns)))
+                    het_file.rename(columns={headers['alternate_headers_position'][idx_replace[0][0]]: 'POSITION'},
+                                    inplace=True)
+                    print('changing header of het file from ' + headers['alternate_headers_position'][
+                        idx_replace[0][0]] + ' to POSITION')
 
             if required_headers[i] == 'CONTIG':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_chromosome'], het_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_chromosome'], het_file.columns))) > 1:
+                if np.sum(np.isfinite(
+                        is_member(headers['alternate_headers_chromosome'], het_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_chromosome'], het_file.columns))) > 1:
                     sys.exit(
                         'missing required header CONTIG and could not replace with any one of CHR, chrom, Chromosome, chr, Chrom!')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_chromosome'], het_file.columns)))
-                    het_file.rename(columns={headers['alternate_headers_chromosome'][idx_replace[0][0]]: 'CONTIG'}, inplace=True)
-                    print 'changing header of het file from ' + headers['alternate_headers_chromosome'][
-                        idx_replace[0][0]] + ' to CONTIG'
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_chromosome'], het_file.columns)))
+                    het_file.rename(columns={headers['alternate_headers_chromosome'][idx_replace[0][0]]: 'CONTIG'},
+                                    inplace=True)
+                    print('changing header of het file from ' + headers['alternate_headers_chromosome'][
+                        idx_replace[0][0]] + ' to CONTIG')
 
             if required_headers[i] == 'ALT_COUNT':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_alt_count'], het_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_alt_count'], het_file.columns))) > 1:
+                if np.sum(np.isfinite(
+                        is_member(headers['alternate_headers_alt_count'], het_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_alt_count'], het_file.columns))) > 1:
                     sys.exit(
                         'missing required header ALT_COUNT and could not replace with any one of t_alt_count, n_alt_count, alt_count')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_alt_count'], het_file.columns)))
-                    het_file.rename(columns={headers['alternate_headers_alt_count'][idx_replace[0][0]]: 'ALT_COUNT'}, inplace=True)
-                    print 'changing header of het file from ' + headers['alternate_headers_alt_count'][
-                        idx_replace[0][0]] + ' to ALT_COUNT'
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_alt_count'], het_file.columns)))
+                    het_file.rename(columns={headers['alternate_headers_alt_count'][idx_replace[0][0]]: 'ALT_COUNT'},
+                                    inplace=True)
+                    print('changing header of het file from ' + headers['alternate_headers_alt_count'][
+                        idx_replace[0][0]] + ' to ALT_COUNT')
 
             if required_headers[i] == 'REF_COUNT':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_ref_count'], het_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_ref_count'], het_file.columns))) > 1:
+                if np.sum(np.isfinite(
+                        is_member(headers['alternate_headers_ref_count'], het_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_ref_count'], het_file.columns))) > 1:
                     sys.exit(
                         'missing required header ALT_COUNT and could not replace with any one of t_ref_count, n_ref_count, ref_count')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_ref_count'], het_file.columns)))
-                    het_file.rename(columns={headers['alternate_headers_ref_count'][idx_replace[0][0]]: 'REF_COUNT'}, inplace=True)
-                    print 'changing header of het file from ' + headers['alternate_headers_ref_count'][
-                        idx_replace[0][0]] + ' to REF_COUNT'
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_ref_count'], het_file.columns)))
+                    het_file.rename(columns={headers['alternate_headers_ref_count'][idx_replace[0][0]]: 'REF_COUNT'},
+                                    inplace=True)
+                    print('changing header of het file from ' + headers['alternate_headers_ref_count'][
+                        idx_replace[0][0]] + ' to REF_COUNT')
 
         return het_file
 
@@ -422,7 +452,7 @@ def fix_seg_file_header(seg_file):
 
     headers = alternate_file_headers()
 
-    required_headers = ['Chromosome', 'Start.bp', 'End.bp', 'f', 'tau','n_probes']
+    required_headers = ['Chromosome', 'Start.bp', 'End.bp', 'f', 'tau', 'n_probes']
 
     if np.sum(np.isfinite((is_member(required_headers, seg_file.columns)))) == 5:
         return seg_file
@@ -430,37 +460,45 @@ def fix_seg_file_header(seg_file):
         missing_idx = np.where(~np.isfinite((is_member(required_headers, seg_file.columns))))
         for i in missing_idx[0]:
             if required_headers[i] == 'Start.bp':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_start_position'], seg_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_start_position'], seg_file.columns))) > 1:
+                if np.sum(np.isfinite(
+                        is_member(headers['alternate_headers_start_position'], seg_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_start_position'], seg_file.columns))) > 1:
                     sys.exit('missing required header Start.bp and could not replace with Start or Start_bp')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_start_position'], seg_file.columns)))
-                    seg_file.rename(columns={headers['alternate_headers_start_position'][idx_replace[0][0]]: 'Start.bp'},
-                                    inplace=True)
-                    print 'changing header of seg file from ' + headers['alternate_headers_start_position'][
-                        idx_replace[0][0]] + ' to Start.bp'
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_start_position'], seg_file.columns)))
+                    seg_file.rename(
+                        columns={headers['alternate_headers_start_position'][idx_replace[0][0]]: 'Start.bp'},
+                        inplace=True)
+                    print('changing header of seg file from ' + headers['alternate_headers_start_position'][
+                        idx_replace[0][0]] + ' to Start.bp')
 
             if required_headers[i] == 'End.bp':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_end_position'], seg_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_end_position'], seg_file.columns))) > 1:
+                if np.sum(np.isfinite(
+                        is_member(headers['alternate_headers_end_position'], seg_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_end_position'], seg_file.columns))) > 1:
                     sys.exit('missing required header End.bp and could not replace with End or End_bp')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_end_position'], seg_file.columns)))
-                    seg_file.rename(columns={headers['alternate_headers_end_position'][idx_replace[0][0]]: 'End.bp'}, inplace=True)
-                    print 'changing header of seg file from ' + headers['alternate_headers_end_position'][
-                        idx_replace[0][0]] + ' to End.bp'
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_end_position'], seg_file.columns)))
+                    seg_file.rename(columns={headers['alternate_headers_end_position'][idx_replace[0][0]]: 'End.bp'},
+                                    inplace=True)
+                    print('changing header of seg file from ' + headers['alternate_headers_end_position'][
+                        idx_replace[0][0]] + ' to End.bp')
 
             if required_headers[i] == 'Chromosome':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_chromosome'], seg_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_chromosome'], seg_file.columns))) > 1:
+                if np.sum(np.isfinite(
+                        is_member(headers['alternate_headers_chromosome'], seg_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_chromosome'], seg_file.columns))) > 1:
                     sys.exit(
                         'missing required header Chromosome and could not replace with any other header')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_chromosome'], seg_file.columns)))
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_chromosome'], seg_file.columns)))
                     seg_file.rename(columns={headers['alternate_headers_chromosome'][idx_replace[0][0]]: 'Chromosome'},
                                     inplace=True)
-                    print 'changing header of seg file from ' + headers['alternate_headers_chromosome'][
-                        idx_replace[0][0]] + ' to Chromosome'
+                    print('changing header of seg file from ' + headers['alternate_headers_chromosome'][
+                        idx_replace[0][0]] + ' to Chromosome')
 
             if required_headers[i] == 'f':
                 if np.sum(np.isfinite(is_member(headers['alternate_headers_f'], seg_file.columns))) == 0 or np.sum(
@@ -470,7 +508,8 @@ def fix_seg_file_header(seg_file):
                 else:
                     idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_f'], seg_file.columns)))
                     seg_file.rename(columns={headers['alternate_headers_f'][idx_replace[0][0]]: 'f'}, inplace=True)
-                    print 'changing header of seg file from ' + headers['alternate_headers_f'][idx_replace[0][0]] + ' to f'
+                    print('changing header of seg file from ' + headers['alternate_headers_f'][
+                        idx_replace[0][0]] + ' to f')
 
             if required_headers[i] == 'tau':
                 if np.sum(np.isfinite(is_member(headers['alternate_headers_tau'], seg_file.columns))) == 0 or np.sum(
@@ -482,23 +521,27 @@ def fix_seg_file_header(seg_file):
                     seg_file.rename(columns={headers['alternate_headers_tau'][idx_replace[0][0]]: 'tau'}, inplace=True)
                     if headers['alternate_headers_tau'][idx_replace[0][0]] == 'LOG2_COPY_RATIO_POSTERIOR_50':
                         print('transforming log2 data tau column to 2 centered: 2^(CNratio)+1')
-                        seg_file['tau'] = np.power(2,seg_file['tau'])+1
-                    print 'changing header of seg file from ' + headers['alternate_headers_tau'][idx_replace[0][0]] + ' to tau'
+                        seg_file['tau'] = np.power(2, seg_file['tau']) + 1
+                    print('changing header of seg file from ' + headers['alternate_headers_tau'][
+                        idx_replace[0][0]] + ' to tau')
             if required_headers[i] == 'n_probes':
-                if np.sum(np.isfinite(is_member(headers['alternate_headers_n_probes'], seg_file.columns))) == 0 or np.sum(
-                        np.isfinite(is_member(headers['alternate_headers_n_probes'], seg_file.columns))) > 1:
+                if np.sum(
+                        np.isfinite(is_member(headers['alternate_headers_n_probes'], seg_file.columns))) == 0 or np.sum(
+                    np.isfinite(is_member(headers['alternate_headers_n_probes'], seg_file.columns))) > 1:
                     sys.exit(
                         'missing required header n_probes and could not replace with any one of alternates')
                 else:
-                    idx_replace = np.where(np.isfinite(is_member(headers['alternate_headers_n_probes'], seg_file.columns)))
-                    seg_file.rename(columns={headers['alternate_headers_n_probes'][idx_replace[0][0]]: 'n_probes'}, inplace=True)
-                    print 'changing header of seg file from ' + headers['alternate_headers_n_probes'][idx_replace[0][0]] + ' to n_probes'
+                    idx_replace = np.where(
+                        np.isfinite(is_member(headers['alternate_headers_n_probes'], seg_file.columns)))
+                    seg_file.rename(columns={headers['alternate_headers_n_probes'][idx_replace[0][0]]: 'n_probes'},
+                                    inplace=True)
+                    print('changing header of seg file from ' + headers['alternate_headers_n_probes'][
+                        idx_replace[0][0]] + ' to n_probes')
 
         return seg_file
 
 
-def read_indel_vcf(vcf,seg_table,indel_type):
-
+def read_indel_vcf(vcf, seg_table, indel_type):
     content = []
     if vcf[-2:] == 'gz':
         with gzip.open(vcf, 'r') as f:
@@ -515,8 +558,10 @@ def read_indel_vcf(vcf,seg_table,indel_type):
 
     if indel_type.lower() == 'strelka':
         indel_table = pd.read_csv(vcf, sep='\t', comment='#', header=None, low_memory=False, dtype=cols_type)
-        indel_table.rename(columns={0: 'contig', 1: 'position',2:'ID',3:'REF',4:'ALT',5:'QUAL',7:'INFO', 8: 'format', 6: 'filter', 9: headerline[9].lower(), 10: headerline[10][0:-1].lower()},
-                       inplace=True)
+        indel_table.rename(
+            columns={0: 'contig', 1: 'position', 2: 'ID', 3: 'REF', 4: 'ALT', 5: 'QUAL', 7: 'INFO', 8: 'format',
+                     6: 'filter', 9: headerline[9].lower(), 10: headerline[10][0:-1].lower()},
+            inplace=True)
         counts_format = indel_table['format'][0].split(':')
         depth_ix = counts_format.index('DP')
         alt_indel_ix = counts_format.index('TIR')
@@ -542,31 +587,34 @@ def read_indel_vcf(vcf,seg_table,indel_type):
         else:
             if tumor_sample == headerline[9]:
                 indel_table.rename(
-                        columns={0: 'contig', 1: 'position', 2: 'ID', 3: 'REF', 4: 'ALT', 5: 'QUAL', 7: 'INFO', 8: 'format',
-                         6: 'filter', 9: 'tumor', 10: 'normal'},
-                        inplace=True)
+                    columns={0: 'contig', 1: 'position', 2: 'ID', 3: 'REF', 4: 'ALT', 5: 'QUAL', 7: 'INFO', 8: 'format',
+                             6: 'filter', 9: 'tumor', 10: 'normal'},
+                    inplace=True)
             elif tumor_sample == headerline[10][0:-1]:
                 indel_table.rename(
                     columns={0: 'contig', 1: 'position', 2: 'ID', 3: 'REF', 4: 'ALT', 5: 'QUAL', 7: 'INFO', 8: 'format',
                              6: 'filter', 9: 'normal', 10: 'tumor'},
                     inplace=True)
             else:
-                print 'failed to read MuTect 2 indels VCF'
+                print('failed to read MuTect 2 indels VCF')
                 sys.exit()
         counts_format = indel_table['format'][0].split(':')
         depth_ix = counts_format.index('AD')
-        indel_table = indel_table[np.isfinite(is_member(indel_table['filter'], ['PASS', 'alt_allele_in_normal','artifact_in_normal']))]
+        indel_table = indel_table[
+            np.isfinite(is_member(indel_table['filter'], ['PASS', 'alt_allele_in_normal', 'artifact_in_normal']))]
         indel_table.reset_index(inplace=True, drop=True)
 
     elif indel_type.lower() == 'sanger':
         indel_table = pd.read_csv(vcf, sep='\t', comment='#', header=None, low_memory=False, dtype=cols_type)
         # CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NORMAL  TUMOUR
-        indel_table.rename(columns={0: 'contig', 1: 'position',2:'ID',3:'REF',4:'ALT',5:'QUAL',7:'INFO',8: 'format', 6: 'filter', 9: headerline[9].lower(), 10: headerline[10][0:-1].lower()},
-                           inplace=True)
+        indel_table.rename(
+            columns={0: 'contig', 1: 'position', 2: 'ID', 3: 'REF', 4: 'ALT', 5: 'QUAL', 7: 'INFO', 8: 'format',
+                     6: 'filter', 9: headerline[9].lower(), 10: headerline[10][0:-1].lower()},
+            inplace=True)
         b1 = np.logical_or.reduce([indel_table['filter'] == 'F012', indel_table['filter'] == 'F012;F015'])
         b2 = np.logical_or.reduce([indel_table['filter'] == 'PASS', indel_table['filter'] == 'F015'])
         indel_table = indel_table[np.logical_or.reduce([b1, b2])]
-        indel_table.reset_index(inplace=True,drop=True)
+        indel_table.reset_index(inplace=True, drop=True)
         format_string = indel_table['format'][0].split(':')
         total_depth_idx = [format_string.index('PR'), format_string.index('NR')]
         alt_count_idx = [format_string.index('PU'), format_string.index('NU')]
@@ -594,7 +642,7 @@ def read_indel_vcf(vcf,seg_table,indel_type):
         if indel_type.lower() == 'mutect2':
             n_alt_count[index] = int(spl_n[depth_ix].split(',')[1])
             n_ref_count[index] = int(spl_n[depth_ix].split(',')[0])
-            n_depth[index] = n_alt_count[index]+n_ref_count[index]
+            n_depth[index] = n_alt_count[index] + n_ref_count[index]
             t_alt_count[index] = int(spl_t[depth_ix].split(',')[1])
             t_ref_count[index] = int(spl_t[depth_ix].split(',')[0])
             t_depth[index] = t_alt_count[index] + t_ref_count[index]
@@ -606,8 +654,11 @@ def read_indel_vcf(vcf,seg_table,indel_type):
             t_alt_count[index] = np.sum([int(spl_t[i]) for i in alt_count_idx])
             t_ref_count[index] = t_depth[index] - t_alt_count[index]
     if len(indel_table) == 0:
-        indel_table = pd.DataFrame(index=[0],columns=['contig', 'position','ID','REF','ALT','QUAL','INFO','format', 'filter',headerline[9].lower(), headerline[10][0:-1].lower(),
-                                                      't_depth','t_alt_count','t_ref_count','n_alt_count','n_depth','n_ref_count','tau','f_acs','Chromosome','genomic_coord_x'])
+        indel_table = pd.DataFrame(index=[0],
+                                   columns=['contig', 'position', 'ID', 'REF', 'ALT', 'QUAL', 'INFO', 'format',
+                                            'filter', headerline[9].lower(), headerline[10][0:-1].lower(),
+                                            't_depth', 't_alt_count', 't_ref_count', 'n_alt_count', 'n_depth',
+                                            'n_ref_count', 'tau', 'f_acs', 'Chromosome', 'genomic_coord_x'])
     else:
         indel_table['t_depth'] = t_alt_count + t_ref_count
         indel_table['t_alt_count'] = t_alt_count
@@ -616,36 +667,37 @@ def read_indel_vcf(vcf,seg_table,indel_type):
         indel_table['n_depth'] = n_alt_count + n_ref_count
         indel_table['n_alt_count'] = n_alt_count
         indel_table['n_ref_count'] = n_ref_count
-    # only consider sites which were rejected as germline or were passed
-        if type(indel_table['contig'][0]) == str :
+        # only consider sites which were rejected as germline or were passed
+        if type(indel_table['contig'][0]) == str:
             indel_table['Chromosome'] = chr2num(indel_table['contig'])
         else:
-            indel_table['Chromosome'] = indel_table['contig']-1
-    # add linear position field and consider only sites which are rejected as germline i.e. PASS or QSI_ref
+            indel_table['Chromosome'] = indel_table['contig'] - 1
+        # add linear position field and consider only sites which are rejected as germline i.e. PASS or QSI_ref
         indel_table = indel_table[np.isfinite(indel_table['Chromosome'])]
         indel_table.reset_index(inplace=True, drop=True)
         indel_table['genomic_coord_x'] = hg19_to_linear_positions(indel_table['Chromosome'], indel_table['position'])
-    # annotate with acs data
+        # annotate with acs data
         f_acs = np.zeros([len(indel_table), 1]) + 0.5
         tau = np.zeros([len(indel_table), 1]) + 2
         for i, r in seg_table.iterrows():
             f_acs[np.logical_and(np.array(indel_table['genomic_coord_x']) >= r['genomic_coord_start'],
-                             np.array(indel_table['genomic_coord_x']) <= r['genomic_coord_end'])] = r.f
+                                 np.array(indel_table['genomic_coord_x']) <= r['genomic_coord_end'])] = r.f
             tau[np.logical_and(np.array(indel_table['genomic_coord_x']) >= r['genomic_coord_start'],
-                           np.array(indel_table['genomic_coord_x']) <= r[
-                               'genomic_coord_end'])] = r.tau + 0.001
+                               np.array(indel_table['genomic_coord_x']) <= r[
+                                   'genomic_coord_end'])] = r.tau + 0.001
         indel_table['tau'] = tau
         indel_table['f_acs'] = f_acs
     return indel_table
 
+
 def build_exac_pickle(exac_file):
     # create ExAC site dictionary from VCF file
     exac_site_info = {}
-    print 'Filtering ExAC sites from candidate mutations'
+    print('Filtering ExAC sites from candidate mutations')
     with gzip.open(exac_file, "rb") as vcf_file:
         for line_index, line in enumerate(vcf_file):
             if line_index % 10000 == 0:
-                print 'processed ' + str(line_index) + ' ExAC sites'
+                print('processed ' + str(line_index) + ' ExAC sites')
             spl = line.strip("\n").split("\t")
 
             # line is a comment
